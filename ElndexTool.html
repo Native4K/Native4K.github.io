@@ -29,10 +29,9 @@
         }
         .tree-group {
             margin-bottom: 10px;
-            border-left: none; /* Removed old border */
+            border-left: none;
             padding-left: 0;
         }
-
         .tree-header {
             background: #252525;
             padding: 12px 15px;
@@ -44,20 +43,17 @@
             border: 1px solid #333;
             transition: background 0.2s;
         }
-
         .tree-header:hover {
             background: #333;
             border-color: var(--accent);
         }
-
         .tree-header.active {
             border-bottom-left-radius: 0;
             border-bottom-right-radius: 0;
             border-color: var(--accent);
         }
-
         .tree-content {
-            display: none; /* Hidden by default */
+            display: none;
             background: #1a1a1a;
             padding: 10px;
             border: 1px solid #333;
@@ -65,20 +61,16 @@
             border-bottom-left-radius: 6px;
             border-bottom-right-radius: 6px;
         }
-
         .tree-content.show {
             display: block;
         }
-
         .arrow {
             transition: transform 0.3s;
             font-size: 0.8rem;
         }
-
         .tree-header.active .arrow {
             transform: rotate(180deg);
         }
-
         .badge-count {
             background: #444;
             padding: 2px 8px;
@@ -86,8 +78,6 @@
             font-size: 0.7rem;
             color: var(--accent);
         }
-
-        /* Container that groups the Base Tree and its Subtrees */
         .family-group {
             background: rgba(255, 255, 255, 0.03);
             border-radius: 8px;
@@ -95,7 +85,6 @@
             margin-bottom: 20px;
             border: 1px solid #2a2a2a;
         }
-
         .family-title {
             font-size: 0.65rem;
             color: var(--text-muted);
@@ -107,23 +96,18 @@
             align-items: center;
             gap: 10px;
         }
-
         .family-title::after {
             content: "";
             flex: 1;
             height: 1px;
             background: #333;
         }
-
-        /* Adjust tree group to avoid excess margin within family */
         .family-group .tree-group {
             margin-bottom: 8px;
         }
-
         .family-group .tree-group:last-child {
             margin-bottom: 0;
         }
-        
         #database-panel { flex: 2; }
         #build-panel { flex: 1.2; min-width: 350px; background: #181818; border: 1px solid #333; }
         .upload-area { background: #2a2a2a; border: 2px dashed #444; border-radius: 8px; padding: 15px; text-align: center; margin-bottom: 20px; }
@@ -141,7 +125,6 @@
         }
         .skill-card:hover:not(.disabled) { border-color: var(--accent); background: #333; }
         .skill-card.disabled { opacity: 0.15; cursor: not-allowed; filter: grayscale(1); }
-        /* Style for Active Aura in the Build */
         .skill-card.aura-active {
             border: 1px solid var(--success);
             box-shadow: 0 0 8px rgba(3, 218, 198, 0.2);
@@ -150,6 +133,9 @@
         .btn-remove { background: var(--error); color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+        .discount-text { color: var(--success); font-size: 0.7rem; margin: 5px 0; }
+        .strikethrough { text-decoration: line-through; color: var(--text-muted); margin-right: 4px; }
+        .eff-cost { color: var(--success); font-weight: bold; }
     </style>
 </head>
 <body>
@@ -166,6 +152,7 @@
             <div class="stat-box"><div>Master Tokens</div><div class="stat-value" id="master-tokens">0 / 2</div></div>
             <div class="stat-box"><div>Bar</div><div class="stat-value" id="combat-bar-count">0 / 10</div></div>
         </div>
+        <div id="discount-info" class="discount-text"></div>
         <button id="btn-export" onclick="exportBuild()" style="width: 100%; padding: 10px; margin-bottom: 20px; background: var(--accent); color: #121212; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">
             📋 Export Summary
         </button>
@@ -173,6 +160,7 @@
     </div>
 
     <script>
+        // --- Attunement tree relations ---
         const relations = {
             "Air": ["Gravity", "Sound", "Lightning"],
             "Water": ["Mist", "Wellspring", "Ice", "Ink"],
@@ -188,6 +176,45 @@
         let allSkills = [];
         let build = [];
 
+        // --- DISCOUNT RULES (racial name -> { tree: discountAmount, ... }) ---
+        const discountRules = {
+            "(Ookami) Air Discount": { "Air": 5 },
+            "(Batkin) Sound Discount": { "Sound": 5 },
+            "(Wolken) Light/Holy Discount": { "Light": 5, "Holy": 5 },
+            "(Lapinae) Earth Discount": { "Earth": 5 },
+			"(Felinae) Cosmic Discount": { "Cosmic": 5 },
+			"(Razuka) Blood Discount": { "Blood": 5 },
+			"(Kitsune) Fire Discount": { "Fire": 5 },
+			"(Ursidae) Physical Discount": { "Physical": 5 },
+			"(Aerodyne) Spirit Discount": { "Spirit": 5 },
+			"(Drakanite) Fire Discount": { "Fire": 5 },
+        };
+
+        // --- Helper functions ---
+        function isRacial(skill) {
+            return skill.elemento.toUpperCase().includes('RACIAL');
+        }
+
+        function isOpener(skill) {
+            return skill.categoria.toUpperCase() === 'OPENER';
+        }
+
+        // Compute effective cost of a skill (only openers can be discounted)
+        function getEffectiveCost(skill) {
+            if (!isOpener(skill)) return skill.custo;
+            let discount = 0;
+            for (const owned of build) {
+                if (isRacial(owned) && discountRules[owned.nome]) {
+                    const treeDiscounts = discountRules[owned.nome];
+                    if (treeDiscounts[skill.elemento]) {
+                        discount += treeDiscounts[skill.elemento];
+                    }
+                }
+            }
+            return Math.max(0, skill.custo - discount);
+        }
+
+        // --- CSV processing ---
         function processCSV(csvText) {
             const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== "");
             if (lines.length < 2) return;
@@ -213,6 +240,7 @@
             return null;
         }
 
+        // --- Requirement check (uses ORIGINAL costs for 40-point threshold) ---
         function checkRequirements(skill) {
             if (build.some(s => s.nome === skill.nome)) return { canBuy: false, reason: "Already owned." };
 
@@ -220,7 +248,10 @@
             const el = skill.elemento.trim().toUpperCase();
             
             const tokensUsados = build.filter(s => s.categoria.toUpperCase().includes('MASTER')).length;
-            const ptsNoElemento = build.filter(s => s.elemento === skill.elemento).reduce((acc, s) => acc + s.custo, 0);
+            // IMPORTANT: Use ORIGINAL costs for the 40-point requirement
+            const ptsNoElemento = build
+                .filter(s => s.elemento === skill.elemento)
+                .reduce((acc, s) => acc + s.custo, 0); // original cost
             const hasOpenerDesteElemento = build.some(s => s.elemento === skill.elemento && s.categoria.toUpperCase() === 'OPENER');
 
             // --- 1. RULES FOR FREE TREES (RACIAL / STANCES / STYLES) ---
@@ -261,13 +292,13 @@
                 // Exceptions for Light/Spirit/Nature/Magma/Sand/Lightning/Mist/Sound
                 if (skill.elemento === 'Light' && build.some(s => ['Holy', 'Cosmic'].includes(s.elemento) && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
                 if (skill.elemento === 'Spirit' && build.some(s => s.elemento === 'Energy' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
-				if (skill.elemento === 'Nature' && build.some(s => s.elemento === 'Earth' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
-				if (skill.elemento === 'Magma' && build.some(s => s.elemento === 'Earth' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
-				if (skill.elemento === 'Sand' && build.some(s => s.elemento === 'Water' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
-				if (skill.elemento === 'Lightning' && build.some(s => s.elemento === 'Plasma' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
-				if (skill.elemento === 'Mist' && build.some(s => s.elemento === 'Fire' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
-				if (skill.elemento === 'Sound' && build.some(s => s.elemento === 'Illusion' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
-				
+                if (skill.elemento === 'Nature' && build.some(s => s.elemento === 'Earth' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
+                if (skill.elemento === 'Magma' && build.some(s => s.elemento === 'Earth' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
+                if (skill.elemento === 'Sand' && build.some(s => s.elemento === 'Water' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
+                if (skill.elemento === 'Lightning' && build.some(s => s.elemento === 'Plasma' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
+                if (skill.elemento === 'Mist' && build.some(s => s.elemento === 'Fire' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
+                if (skill.elemento === 'Sound' && build.some(s => s.elemento === 'Illusion' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
+                
                 return hasBaseAccess ? { canBuy: true } : { canBuy: false, reason: `Requires Opener of ${baseTree}.` };
             }
 
@@ -275,52 +306,45 @@
             if (!hasOpenerDesteElemento) return { canBuy: false, reason: "Requires tree Opener." };
             
             if (cat === 'INTERMEDIATE' || cat === 'MASTER') {
+                // use original cost for the threshold
                 return ptsNoElemento >= 40 ? { canBuy: true } : { canBuy: false, reason: "Requires 40 points in the tree." };
             }
 
             return { canBuy: true };
         }
 
+        // --- UI actions ---
         function toggleActionBar(index) {
             const skill = build[index];
-            
             if (skill.tipo !== "Ativa") {
                 alert("Only Active skills can be added to the combat bar.");
                 return;
             }
-
             const ativasNaBarra = build.filter(s => s.naBarra).length;
-
             if (!skill.naBarra && ativasNaBarra >= 10) {
                 alert("Limit of 10 skills on the combat bar reached!");
                 return;
             }
-
             skill.naBarra = !skill.naBarra;
             renderApp();
         }
 
         function toggleAura(index) {
             const isCurrentlyActive = build[index].isAuraActive;
-            
-            // 1. Deactivate ALL auras first (to ensure only one remains active)
             build.forEach(s => {
                 if (s.categoria.toUpperCase().includes('AURA')) {
                     s.isAuraActive = false;
                 }
             });
-
-            // 2. If the clicked one wasn't active, activate it now
             if (!isCurrentlyActive) {
                 build[index].isAuraActive = true;
             }
-
             renderApp();
         }
 
         function buySkill(skill) {
             if (checkRequirements(skill).canBuy) {
-                // Initialize as not on the bar by default
+                // Store the skill with its original cost (discounts applied dynamically later)
                 const newSkill = {...skill, naBarra: false};
                 build.push(newSkill);
                 renderApp();
@@ -328,55 +352,41 @@
         }
 
         function removeSkill(index) {
-            // Remove the selected skill
             build.splice(index, 1);
-
-            // Cascade re-validation:
-            // Only remove what truly lost its technical requirement
             let changed;
             do {
                 changed = false;
                 for (let i = 0; i < build.length; i++) {
                     const skillToCheck = build[i];
-                    
-                    // Temporarily remove to check if it would still be "purchasable"
                     const originalItem = build.splice(i, 1)[0];
                     const validation = checkRequirements(originalItem);
-                    
                     if (validation.canBuy) {
-                        // If still valid, put it back
                         build.splice(i, 0, originalItem);
                     } else {
-                        // If no longer valid (e.g., lost parent Opener), keep it out and continue loop
                         console.log(`Removing ${originalItem.nome} due to missing requirement: ${validation.reason}`);
                         changed = true;
                         break; 
                     }
                 }
             } while (changed);
-
             renderApp();
         }
 
-        // Global variable to maintain element order as they appear in the CSV
+        // --- Rendering ---
         let elementsOrder = [];
 
         function processCSV(csvText) {
             const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== "");
             if (lines.length < 2) return;
             const separator = lines[0].includes(';') ? ';' : ',';
-            
-            elementsOrder = []; // Reset order
-            
+            elementsOrder = [];
             allSkills = lines.slice(1).map(line => {
                 const regex = new RegExp(`${separator}(?=(?:(?:[^"]*"){2})*[^"]*$)`);
                 const cols = line.split(regex).map(c => c.replace(/^"|"$/g, '').trim());
-                
                 const elemento = cols[0];
                 if (elemento && !elementsOrder.includes(elemento)) {
-                    elementsOrder.push(elemento); // Map exact appearance order
+                    elementsOrder.push(elemento);
                 }
-
                 return { 
                     elemento: elemento, 
                     nome: cols[1], 
@@ -391,14 +401,30 @@
         function renderApp() {
             const container = document.getElementById('skills-container');
             const buildList = document.getElementById('build-container');
+            const discountInfo = document.getElementById('discount-info');
             
-            // Save which groups were open
             const openedGroups = Array.from(document.querySelectorAll('.tree-header.active'))
                                     .map(h => h.dataset.element);
 
             container.innerHTML = ''; 
             buildList.innerHTML = '';
+            discountInfo.innerHTML = '';
 
+            // --- Build active discounts summary ---
+            let discountLines = [];
+            for (const racial of build.filter(isRacial)) {
+                if (discountRules[racial.nome]) {
+                    const discounts = discountRules[racial.nome];
+                    for (const [tree, amount] of Object.entries(discounts)) {
+                        discountLines.push(`${racial.nome} → -${amount} pts on ${tree} Opener`);
+                    }
+                }
+            }
+            if (discountLines.length) {
+                discountInfo.innerHTML = '🛠️ Active discounts: ' + discountLines.join('; ');
+            }
+
+            // --- Group skills for left panel ---
             const groupedGrimoire = allSkills.reduce((acc, s) => {
                 const el = s.elemento || "Outros";
                 if (!acc[el]) acc[el] = [];
@@ -409,30 +435,16 @@
             const renderedElements = new Set();
             const allFamilyMembers = Object.entries(relations).flatMap(([base, subs]) => [base, ...subs]);
 
-            // --- BLOCK 1: RACIALS ---
-            renderSection("Racials", (el) => 
-                el.toUpperCase().includes('RACIAL')
-            );
+            renderSection("Racials", (el) => el.toUpperCase().includes('RACIAL'));
+            renderSection("Combat Styles", (el) => el.toUpperCase().includes('COMBAT STYLES'));
+            renderSection("Others", (el) => !allFamilyMembers.includes(el));
 
-            // --- BLOCK 2: COMBAT STYLES ---
-            renderSection("Combat Styles", (el) => 
-                el.toUpperCase().includes('COMBAT STYLES')
-            );
-
-            // --- BLOCK 3: MISCELLANEOUS (Not in relations and not rendered) ---
-            renderSection("Others", (el) => 
-                !allFamilyMembers.includes(el)
-            );
-
-            // --- BLOCK 4: LINEAGES (Relations) ---
             for (const [base, subs] of Object.entries(relations)) {
                 const familyElements = [base, ...subs].filter(el => groupedGrimoire[el] && !renderedElements.has(el));
-                
                 if (familyElements.length > 0) {
                     const familyDiv = document.createElement('div');
                     familyDiv.className = 'family-group';
                     familyDiv.innerHTML = `<div class="family-title">Attunement: ${base}</div>`;
-
                     familyElements.forEach(el => {
                         const groupHtml = createTreeGroupHtml(el, groupedGrimoire[el], openedGroups);
                         if (groupHtml) {
@@ -444,15 +456,12 @@
                 }
             }
 
-            // --- INTERNAL FUNCTION TO RENDER SECTIONS ---
             function renderSection(title, filterFn) {
                 const elements = Object.keys(groupedGrimoire).filter(el => !renderedElements.has(el) && filterFn(el));
-                
                 if (elements.length > 0) {
                     const sectionDiv = document.createElement('div');
                     sectionDiv.className = 'family-group';
                     sectionDiv.innerHTML = `<div class="family-title">${title}</div>`;
-                    
                     let addedAny = false;
                     elements.forEach(el => {
                         const groupHtml = createTreeGroupHtml(el, groupedGrimoire[el], openedGroups);
@@ -466,7 +475,7 @@
                 }
             }
 
-            // --- 2. RENDER BUILD (RIGHT) ---
+            // --- Build panel (right) ---
             const groupedBuild = build.reduce((acc, s) => {
                 if (!acc[s.elemento]) acc[s.elemento] = [];
                 acc[s.elemento].push(s);
@@ -478,40 +487,48 @@
             for (const [el, skills] of Object.entries(groupedBuild)) {
                 const buildSection = document.createElement('div');
                 buildSection.className = 'tree-group';
-                const treePts = skills.reduce((sum, s) => sum + s.custo, 0);
+                // Sum effective costs for tree total (actual spent)
+                const treePts = skills.reduce((sum, s) => sum + getEffectiveCost(s), 0);
                 buildSection.innerHTML = `<div class="tree-title" style="display:flex; justify-content:space-between; font-size: 0.8rem;">
                     <span>${el}</span><span>${treePts} pts</span>
                 </div>`;
 
                 skills.forEach(s => {
-                    totalPts += s.custo;
+                    const effCost = getEffectiveCost(s);
+                    totalPts += effCost;
                     if (s.categoria.toUpperCase().includes('MASTER')) masters++;
                     if (s.naBarra) barCount++;
 
                     const idx = build.indexOf(s);
                     const item = document.createElement('div');
                     
-                    // If it's an active aura, add the special class
                     const isAura = s.categoria.toUpperCase().includes('AURA');
                     item.className = `skill-card ${s.isAuraActive ? 'aura-active' : ''}`;
                     
                     const barBtnColor = s.naBarra ? 'var(--accent)' : '#444';
                     const barBtnOpacity = s.tipo === 'Ativa' ? '1' : '0.2';
                     
-                    // Aura button (only appears if it's AURA or MASTER AURA)
                     const auraBtnHtml = isAura ? 
                         `<button onclick="toggleAura(${idx})" style="background:${s.isAuraActive ? 'var(--success)' : '#444'}; border:none; color:white; border-radius:4px; cursor:pointer; padding: 5px 8px;" title="Activate Aura">✨</button>` 
                         : '';
 
-                    // Map skill type to English for display
                     const tipoDisplay = s.tipo === "Ativa" ? "Active" : "Passive";
+
+                    // Cost display: show original if discounted
+                    let costDisplay = '';
+                    if (effCost < s.custo) {
+                        costDisplay = `<span class="strikethrough">${s.custo}</span><span class="eff-cost">${effCost}</span> pts`;
+                    } else {
+                        costDisplay = `${effCost} pts`;
+                    }
 
                     item.innerHTML = `
                         <div style="flex:1">
                             <strong style="font-size:0.85rem">${s.nome}</strong><br>
                             <small>${s.categoria} | ${tipoDisplay}</small>
                         </div>
-                        <div style="display:flex; gap:5px;">
+                        <div style="display:flex; gap:5px; align-items:center;">
+                            <span style="font-size:0.7rem;">${costDisplay}</span>
                             ${auraBtnHtml}
                             <button onclick="toggleActionBar(${idx})" style="background:${barBtnColor}; opacity:${barBtnOpacity}; border:none; color:white; border-radius:4px; cursor:pointer; padding: 5px 8px;">⚡</button>
                             <button class="btn-remove" onclick="removeSkill(${idx})" style="padding: 5px 10px;">X</button>
@@ -527,7 +544,7 @@
             document.getElementById('combat-bar-count').innerText = `${barCount} / 10`;
         }
 
-        // Helper function to avoid repeating accordion creation code
+        // --- Helper to create accordion groups ---
         function createTreeGroupHtml(el, skills, openedGroups) {
             const availableSkills = skills.filter(s => !build.some(b => b.nome === s.nome));
             if (availableSkills.length === 0) return null;
@@ -562,6 +579,7 @@
                 const card = document.createElement('div');
                 card.className = `skill-card ${req.canBuy ? '' : 'disabled'}`;
                 card.onclick = (e) => { e.stopPropagation(); if(req.canBuy) buySkill(s); };
+                // Show base cost in the database panel
                 card.innerHTML = `<div><strong>${s.nome}</strong><br><small>${s.categoria}</small></div><span>${s.custo} pts</span>`;
                 content.appendChild(card);
             });
@@ -576,10 +594,10 @@
             return groupWrapper;
         }
 
+        // --- Export ---
         function exportBuild() {
             if (build.length === 0) return;
 
-            // Lists to store specific information
             let selectedRacials = [];
             let selectedCombatStyles = [];
             let selectedTrees = [];
@@ -589,36 +607,28 @@
                 const cat = s.categoria.trim().toUpperCase();
 
                 if (el.toUpperCase().includes('RACIAL')) {
-                    // For racials, we want the skill name (e.g., Nemea Aurora)
                     selectedRacials.push(s.nome);
                 } else if (el.toUpperCase().includes('COMBAT STYLES') || cat.includes('STANCE')) {
-                    // For styles, we want the Stance name (e.g., Marksman)
                     selectedCombatStyles.push(s.nome);
                 } else {
-                    // For common spells, we want only the Element/Tree name
                     selectedTrees.push(el);
                 }
             });
 
-            // Remove duplicates (especially for Trees, where you have multiple spells of the same element)
             selectedRacials = [...new Set(selectedRacials)];
             selectedCombatStyles = [...new Set(selectedCombatStyles)];
             selectedTrees = [...new Set(selectedTrees)];
 
             const actionBar = build.filter(s => s.naBarra);
-            const totalPts = build.reduce((sum, s) => sum + s.custo, 0);
+            const totalPts = build.reduce((sum, s) => sum + getEffectiveCost(s), 0);
 
-            // Build the corrected text
             let text =`**RPP:** ${totalPts}\n`;
-
             if (selectedRacials.length > 0) text += `**Racials:** ${selectedRacials.join(', ')}\n`;
             if (selectedCombatStyles.length > 0) text += `**Combat Styles:** ${selectedCombatStyles.join(', ')}\n`;
             if (selectedTrees.length > 0) text += `**Trees:** ${selectedTrees.join(' / ')}\n`;
-            // Add active aura if any
             const activeAura = build.find(s => s.isAuraActive);
             if (activeAura) text += `**Aura:** ${activeAura.nome}\n`;
             
-
             if (actionBar.length > 0) {
                 text += `\n`;
                 actionBar.forEach(s => {
@@ -638,9 +648,10 @@
             });
         }
 
+        // --- Load database ---
         async function loadDatabaseOnline() {
             const status = document.getElementById('load-status');
-            const url = 'https://raw.githubusercontent.com/Native4K/E.Index/refs/heads/main/E_Skills_Database.csv'; // <--- PASTE THE URL HERE
+            const url = 'https://raw.githubusercontent.com/Native4K/E.Index/refs/heads/main/E_Skills_Database.csv';
 
             status.innerText = "Loading data...";
             status.style.color = "var(--accent)";
@@ -648,10 +659,8 @@
             try {
                 const response = await fetch(url);
                 if (!response.ok) throw new Error("Error accessing the online file.");
-                
                 const csvText = await response.text();
-                processCSV(csvText); // Reuse your current processing function
-                
+                processCSV(csvText);
                 status.innerText = "Database updated!";
                 status.style.color = "var(--success)";
             } catch (error) {
@@ -661,7 +670,7 @@
             }
         }
 
-    window.onload = loadDatabaseOnline;
+        window.onload = loadDatabaseOnline;
     </script>
 </body>
 </html>
