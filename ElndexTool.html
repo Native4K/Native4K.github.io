@@ -175,7 +175,7 @@
     <script>
         const relations = {
             "Air": ["Gravity", "Sound", "Lightning"],
-            "Water": ["Mist", "Wellspring", "Ice"],
+            "Water": ["Mist", "Wellspring", "Ice", "Ink"],
             "Earth": ["Sand", "Crystal", "Metal"],
             "Fire": ["Explosion", "Magma", "Plasma", "Light"],
             "Energy": ["Cosmic", "Absorption", "Holy", "Occult"],
@@ -258,13 +258,15 @@
                 // Check if it has the base Opener
                 let hasBaseAccess = build.some(s => s.elemento === baseTree && s.categoria.toUpperCase() === 'OPENER');
                 
-                // Exceptions for Light/Spirit/Water/Earth/Fire/Illusion
+                // Exceptions for Light/Spirit/Nature/Magma/Sand/Lightning/Mist/Sound
                 if (skill.elemento === 'Light' && build.some(s => ['Holy', 'Cosmic'].includes(s.elemento) && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
                 if (skill.elemento === 'Spirit' && build.some(s => s.elemento === 'Energy' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
-				if (skill.elemento === 'Water' && build.some(s => s.elemento === 'Sand' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
-				if (skill.elemento === 'Earth' && build.some(s => ['Magma', 'Nature'].includes(s.elemento) && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
-				if (skill.elemento === 'Fire' && build.some(s => s.elemento === 'Mist' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
-				if (skill.elemento === 'Illusion' && build.some(s => s.elemento === 'Sound' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
+				if (skill.elemento === 'Nature' && build.some(s => s.elemento === 'Earth' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
+				if (skill.elemento === 'Magma' && build.some(s => s.elemento === 'Earth' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
+				if (skill.elemento === 'Sand' && build.some(s => s.elemento === 'Water' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
+				if (skill.elemento === 'Lightning' && build.some(s => s.elemento === 'Plasma' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
+				if (skill.elemento === 'Mist' && build.some(s => s.elemento === 'Fire' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
+				if (skill.elemento === 'Sound' && build.some(s => s.elemento === 'Illusion' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
 				
                 return hasBaseAccess ? { canBuy: true } : { canBuy: false, reason: `Requires Opener of ${baseTree}.` };
             }
@@ -638,7 +640,7 @@
 
         async function loadDatabaseOnline() {
             const status = document.getElementById('load-status');
-            const url = 'https://github.com/Native4K/Skills_database/blob/1ac4b0aa6b6a201beefaf2cb36029d615d8c2d68/Skills_Database.csv'; // <--- PASTE THE URL HERE
+            const url = 'https://raw.githubusercontent.com/Native4K/E.Index/refs/heads/main/E_Skills_Database.csv'; // <--- PASTE THE URL HERE
 
             status.innerText = "Loading data...";
             status.style.color = "var(--accent)";
