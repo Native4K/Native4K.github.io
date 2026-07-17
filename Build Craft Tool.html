@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eternia - Build Planner</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --panel-bg: #1e1e1e;
+            --text-main: #e0e0e0;
+            --text-muted: #888;
+            --accent: #bb86fc;
+            --error: #cf6679;
+            --success: #03dac6;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0; padding: 20px;
+            display: flex; gap: 20px; height: 100vh; box-sizing: border-box;
+        }
+        .panel {
+            background: var(--panel-bg);
+            border-radius: 8px; padding: 20px;
+            display: flex; flex-direction: column;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3); overflow: hidden;
+        }
+        .tree-group {
+            margin-bottom: 10px;
+            border-left: none; /* Removed old border */
+            padding-left: 0;
+        }
+
+        .tree-header {
+            background: #252525;
+            padding: 12px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid #333;
+            transition: background 0.2s;
+        }
+
+        .tree-header:hover {
+            background: #333;
+            border-color: var(--accent);
+        }
+
+        .tree-header.active {
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+            border-color: var(--accent);
+        }
+
+        .tree-content {
+            display: none; /* Hidden by default */
+            background: #1a1a1a;
+            padding: 10px;
+            border: 1px solid #333;
+            border-top: none;
+            border-bottom-left-radius: 6px;
+            border-bottom-right-radius: 6px;
+        }
+
+        .tree-content.show {
+            display: block;
+        }
+
+        .arrow {
+            transition: transform 0.3s;
+            font-size: 0.8rem;
+        }
+
+        .tree-header.active .arrow {
+            transform: rotate(180deg);
+        }
+
+        .badge-count {
+            background: #444;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            color: var(--accent);
+        }
+
+        /* Container that groups the Base Tree and its Subtrees */
+        .family-group {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #2a2a2a;
+        }
+
+        .family-title {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+            margin-left: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .family-title::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: #333;
+        }
+
+        /* Adjust tree group to avoid excess margin within family */
+        .family-group .tree-group {
+            margin-bottom: 8px;
+        }
+
+        .family-group .tree-group:last-child {
+            margin-bottom: 0;
+        }
+        
+        #database-panel { flex: 2; }
+        #build-panel { flex: 1.2; min-width: 350px; background: #181818; border: 1px solid #333; }
+        .upload-area { background: #2a2a2a; border: 2px dashed #444; border-radius: 8px; padding: 15px; text-align: center; margin-bottom: 20px; }
+        .header-stats { display: flex; justify-content: space-between; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #333; }
+        .stat-box { text-align: center; }
+        .stat-value { font-size: 1.5rem; font-weight: bold; color: var(--accent); }
+        .scrollable { flex: 1; overflow-y: auto; padding-right: 10px; }
+        .tree-group { margin-bottom: 25px; border-left: 2px solid #444; padding-left: 15px; }
+        .tree-title { color: var(--accent); font-weight: bold; margin-bottom: 12px; text-transform: uppercase; }
+        .skill-card {
+            background: #2a2a2a; border: 1px solid #444; border-radius: 6px;
+            padding: 12px; margin-bottom: 8px; display: flex;
+            justify-content: space-between; align-items: center;
+            cursor: pointer; transition: 0.1s;
+        }
+        .skill-card:hover:not(.disabled) { border-color: var(--accent); background: #333; }
+        .skill-card.disabled { opacity: 0.15; cursor: not-allowed; filter: grayscale(1); }
+        /* Style for Active Aura in the Build */
+        .skill-card.aura-active {
+            border: 1px solid var(--success);
+            box-shadow: 0 0 8px rgba(3, 218, 198, 0.2);
+        }
+        .skill-type-tag { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: #444; margin-left: 5px; }
+        .btn-remove { background: var(--error); color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+    <div class="panel" id="database-panel">
+        <p id="load-status" style="font-size: 0.7rem; margin-top: 5px; color: var(--text-muted);"></p>
+        <div class="scrollable" id="skills-container"></div>  
+    </div>
+
+    <div class="panel" id="build-panel">
+        <h2>Your Build</h2>
+        <div class="header-stats">
+            <div class="stat-box"><div>Points</div><div class="stat-value" id="total-points">0</div></div>
+            <div class="stat-box"><div>Master Tokens</div><div class="stat-value" id="master-tokens">0 / 2</div></div>
+            <div class="stat-box"><div>Bar</div><div class="stat-value" id="combat-bar-count">0 / 10</div></div>
+        </div>
+        <button id="btn-export" onclick="exportBuild()" style="width: 100%; padding: 10px; margin-bottom: 20px; background: var(--accent); color: #121212; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">
+            📋 Export Summary
+        </button>
+        <div class="scrollable" id="build-container"></div>
+    </div>
+
+    <script>
+        const relations = {
+            "Air": ["Gravity", "Sound", "Lightning"],
+            "Water": ["Mist", "Wellspring", "Ice"],
+            "Earth": ["Sand", "Crystal", "Metal"],
+            "Fire": ["Explosion", "Magma", "Plasma", "Light"],
+            "Energy": ["Cosmic", "Absorption", "Holy", "Occult"],
+            "Blood": ["Nature", "Poison", "Bone"],
+            "Illusion": ["Time", "Spirit", "Arcane", "Dream"],
+            "Physical": ["Armed", "Unarmed", "Ranged"]
+        };
+
+        const physicalSubs = relations["Physical"];
+        let allSkills = [];
+        let build = [];
+
+        function processCSV(csvText) {
+            const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== "");
+            if (lines.length < 2) return;
+            const separator = lines[0].includes(';') ? ';' : ',';
+            allSkills = lines.slice(1).map(line => {
+                const regex = new RegExp(`${separator}(?=(?:(?:[^"]*"){2})*[^"]*$)`);
+                const cols = line.split(regex).map(c => c.replace(/^"|"$/g, '').trim());
+                return { 
+                    elemento: cols[0], 
+                    nome: cols[1], 
+                    categoria: cols[2] ? cols[2].trim() : "", 
+                    custo: parseInt(cols[3]) || 0, 
+                    tipo: cols[4] === "1" ? "Ativa" : "Passiva" 
+                };
+            }).filter(s => s.nome);
+            renderApp();
+        }
+
+        function getBaseTree(subElement) {
+            for (const [base, subs] of Object.entries(relations)) {
+                if (subs.includes(subElement)) return base;
+            }
+            return null;
+        }
+
+        function checkRequirements(skill) {
+            if (build.some(s => s.nome === skill.nome)) return { canBuy: false, reason: "Already owned." };
+
+            const cat = skill.categoria.trim().toUpperCase();
+            const el = skill.elemento.trim().toUpperCase();
+            
+            const tokensUsados = build.filter(s => s.categoria.toUpperCase().includes('MASTER')).length;
+            const ptsNoElemento = build.filter(s => s.elemento === skill.elemento).reduce((acc, s) => acc + s.custo, 0);
+            const hasOpenerDesteElemento = build.some(s => s.elemento === skill.elemento && s.categoria.toUpperCase() === 'OPENER');
+
+            // --- 1. RULES FOR FREE TREES (RACIAL / STANCES / STYLES) ---
+            const isFreeTree = el.includes('RACIAL') || el.includes('COMBAT STYLES') || cat.includes('STANCE');
+
+            if (isFreeTree) {
+                if (cat === 'INTERMEDIATE' || cat === 'MASTER') {
+                    return ptsNoElemento >= 40 ? { canBuy: true } : { canBuy: false, reason: "Requires 40 pts in this tree." };
+                }
+                if (cat.includes('MASTER')) {
+                    return tokensUsados < 2 ? { canBuy: true } : { canBuy: false, reason: "Master token limit." };
+                }
+                return { canBuy: true }; // BASIC and common STANCES are always available
+            }
+
+            // --- 2. RULES FOR SPELLS (ELEMENTS / LINEAGES) ---
+            
+            // Master Tokens
+            if (cat.includes('MASTER') && tokensUsados >= 2) {
+                return { canBuy: false, reason: "Master token limit reached." };
+            }
+
+            // Physical lock (only one style per build)
+            if (physicalSubs.includes(skill.elemento)) {
+                if (build.some(s => physicalSubs.includes(s.elemento) && s.elemento !== skill.elemento)) {
+                    return { canBuy: false, reason: "Only one Physical style per build is allowed." };
+                }
+            }
+
+            // Opener logic
+            if (cat === 'OPENER') {
+                const baseTree = getBaseTree(skill.elemento);
+                if (!baseTree) return { canBuy: true }; // It's a base tree
+
+                // Check if it has the base Opener
+                let hasBaseAccess = build.some(s => s.elemento === baseTree && s.categoria.toUpperCase() === 'OPENER');
+                
+                // Exceptions for Light/Spirit/Water/Earth/Fire/Illusion
+                if (skill.elemento === 'Light' && build.some(s => ['Holy', 'Cosmic'].includes(s.elemento) && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
+                if (skill.elemento === 'Spirit' && build.some(s => s.elemento === 'Energy' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
+				if (skill.elemento === 'Water' && build.some(s => s.elemento === 'Sand' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
+				if (skill.elemento === 'Earth' && build.some(s => ['Magma', 'Nature'].includes(s.elemento) && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
+				if (skill.elemento === 'Fire' && build.some(s => s.elemento === 'Mist' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
+				if (skill.elemento === 'Illusion' && build.some(s => s.elemento === 'Sound' && s.categoria.toUpperCase() === 'OPENER')) hasBaseAccess = true;
+				
+                return hasBaseAccess ? { canBuy: true } : { canBuy: false, reason: `Requires Opener of ${baseTree}.` };
+            }
+
+            // BASIC, INTERMEDIATE and MASTER (own Opener lock)
+            if (!hasOpenerDesteElemento) return { canBuy: false, reason: "Requires tree Opener." };
+            
+            if (cat === 'INTERMEDIATE' || cat === 'MASTER') {
+                return ptsNoElemento >= 40 ? { canBuy: true } : { canBuy: false, reason: "Requires 40 points in the tree." };
+            }
+
+            return { canBuy: true };
+        }
+
+        function toggleActionBar(index) {
+            const skill = build[index];
+            
+            if (skill.tipo !== "Ativa") {
+                alert("Only Active skills can be added to the combat bar.");
+                return;
+            }
+
+            const ativasNaBarra = build.filter(s => s.naBarra).length;
+
+            if (!skill.naBarra && ativasNaBarra >= 10) {
+                alert("Limit of 10 skills on the combat bar reached!");
+                return;
+            }
+
+            skill.naBarra = !skill.naBarra;
+            renderApp();
+        }
+
+        function toggleAura(index) {
+            const isCurrentlyActive = build[index].isAuraActive;
+            
+            // 1. Deactivate ALL auras first (to ensure only one remains active)
+            build.forEach(s => {
+                if (s.categoria.toUpperCase().includes('AURA')) {
+                    s.isAuraActive = false;
+                }
+            });
+
+            // 2. If the clicked one wasn't active, activate it now
+            if (!isCurrentlyActive) {
+                build[index].isAuraActive = true;
+            }
+
+            renderApp();
+        }
+
+        function buySkill(skill) {
+            if (checkRequirements(skill).canBuy) {
+                // Initialize as not on the bar by default
+                const newSkill = {...skill, naBarra: false};
+                build.push(newSkill);
+                renderApp();
+            }
+        }
+
+        function removeSkill(index) {
+            // Remove the selected skill
+            build.splice(index, 1);
+
+            // Cascade re-validation:
+            // Only remove what truly lost its technical requirement
+            let changed;
+            do {
+                changed = false;
+                for (let i = 0; i < build.length; i++) {
+                    const skillToCheck = build[i];
+                    
+                    // Temporarily remove to check if it would still be "purchasable"
+                    const originalItem = build.splice(i, 1)[0];
+                    const validation = checkRequirements(originalItem);
+                    
+                    if (validation.canBuy) {
+                        // If still valid, put it back
+                        build.splice(i, 0, originalItem);
+                    } else {
+                        // If no longer valid (e.g., lost parent Opener), keep it out and continue loop
+                        console.log(`Removing ${originalItem.nome} due to missing requirement: ${validation.reason}`);
+                        changed = true;
+                        break; 
+                    }
+                }
+            } while (changed);
+
+            renderApp();
+        }
+
+        // Global variable to maintain element order as they appear in the CSV
+        let elementsOrder = [];
+
+        function processCSV(csvText) {
+            const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== "");
+            if (lines.length < 2) return;
+            const separator = lines[0].includes(';') ? ';' : ',';
+            
+            elementsOrder = []; // Reset order
+            
+            allSkills = lines.slice(1).map(line => {
+                const regex = new RegExp(`${separator}(?=(?:(?:[^"]*"){2})*[^"]*$)`);
+                const cols = line.split(regex).map(c => c.replace(/^"|"$/g, '').trim());
+                
+                const elemento = cols[0];
+                if (elemento && !elementsOrder.includes(elemento)) {
+                    elementsOrder.push(elemento); // Map exact appearance order
+                }
+
+                return { 
+                    elemento: elemento, 
+                    nome: cols[1], 
+                    categoria: cols[2] ? cols[2].trim() : "", 
+                    custo: parseInt(cols[3]) || 0, 
+                    tipo: cols[4] === "1" ? "Ativa" : "Passiva" 
+                };
+            }).filter(s => s.nome);
+            renderApp();
+        }
+
+        function renderApp() {
+            const container = document.getElementById('skills-container');
+            const buildList = document.getElementById('build-container');
+            
+            // Save which groups were open
+            const openedGroups = Array.from(document.querySelectorAll('.tree-header.active'))
+                                    .map(h => h.dataset.element);
+
+            container.innerHTML = ''; 
+            buildList.innerHTML = '';
+
+            const groupedGrimoire = allSkills.reduce((acc, s) => {
+                const el = s.elemento || "Outros";
+                if (!acc[el]) acc[el] = [];
+                acc[el].push(s);
+                return acc;
+            }, {});
+
+            const renderedElements = new Set();
+            const allFamilyMembers = Object.entries(relations).flatMap(([base, subs]) => [base, ...subs]);
+
+            // --- BLOCK 1: RACIALS ---
+            renderSection("Racials", (el) => 
+                el.toUpperCase().includes('RACIAL')
+            );
+
+            // --- BLOCK 2: COMBAT STYLES ---
+            renderSection("Combat Styles", (el) => 
+                el.toUpperCase().includes('COMBAT STYLES')
+            );
+
+            // --- BLOCK 3: MISCELLANEOUS (Not in relations and not rendered) ---
+            renderSection("Others", (el) => 
+                !allFamilyMembers.includes(el)
+            );
+
+            // --- BLOCK 4: LINEAGES (Relations) ---
+            for (const [base, subs] of Object.entries(relations)) {
+                const familyElements = [base, ...subs].filter(el => groupedGrimoire[el] && !renderedElements.has(el));
+                
+                if (familyElements.length > 0) {
+                    const familyDiv = document.createElement('div');
+                    familyDiv.className = 'family-group';
+                    familyDiv.innerHTML = `<div class="family-title">Attunement: ${base}</div>`;
+
+                    familyElements.forEach(el => {
+                        const groupHtml = createTreeGroupHtml(el, groupedGrimoire[el], openedGroups);
+                        if (groupHtml) {
+                            familyDiv.appendChild(groupHtml);
+                            renderedElements.add(el);
+                        }
+                    });
+                    container.appendChild(familyDiv);
+                }
+            }
+
+            // --- INTERNAL FUNCTION TO RENDER SECTIONS ---
+            function renderSection(title, filterFn) {
+                const elements = Object.keys(groupedGrimoire).filter(el => !renderedElements.has(el) && filterFn(el));
+                
+                if (elements.length > 0) {
+                    const sectionDiv = document.createElement('div');
+                    sectionDiv.className = 'family-group';
+                    sectionDiv.innerHTML = `<div class="family-title">${title}</div>`;
+                    
+                    let addedAny = false;
+                    elements.forEach(el => {
+                        const groupHtml = createTreeGroupHtml(el, groupedGrimoire[el], openedGroups);
+                        if (groupHtml) {
+                            sectionDiv.appendChild(groupHtml);
+                            renderedElements.add(el);
+                            addedAny = true;
+                        }
+                    });
+                    if (addedAny) container.appendChild(sectionDiv);
+                }
+            }
+
+            // --- 2. RENDER BUILD (RIGHT) ---
+            const groupedBuild = build.reduce((acc, s) => {
+                if (!acc[s.elemento]) acc[s.elemento] = [];
+                acc[s.elemento].push(s);
+                return acc;
+            }, {});
+
+            let totalPts = 0, masters = 0, barCount = 0;
+
+            for (const [el, skills] of Object.entries(groupedBuild)) {
+                const buildSection = document.createElement('div');
+                buildSection.className = 'tree-group';
+                const treePts = skills.reduce((sum, s) => sum + s.custo, 0);
+                buildSection.innerHTML = `<div class="tree-title" style="display:flex; justify-content:space-between; font-size: 0.8rem;">
+                    <span>${el}</span><span>${treePts} pts</span>
+                </div>`;
+
+                skills.forEach(s => {
+                    totalPts += s.custo;
+                    if (s.categoria.toUpperCase().includes('MASTER')) masters++;
+                    if (s.naBarra) barCount++;
+
+                    const idx = build.indexOf(s);
+                    const item = document.createElement('div');
+                    
+                    // If it's an active aura, add the special class
+                    const isAura = s.categoria.toUpperCase().includes('AURA');
+                    item.className = `skill-card ${s.isAuraActive ? 'aura-active' : ''}`;
+                    
+                    const barBtnColor = s.naBarra ? 'var(--accent)' : '#444';
+                    const barBtnOpacity = s.tipo === 'Ativa' ? '1' : '0.2';
+                    
+                    // Aura button (only appears if it's AURA or MASTER AURA)
+                    const auraBtnHtml = isAura ? 
+                        `<button onclick="toggleAura(${idx})" style="background:${s.isAuraActive ? 'var(--success)' : '#444'}; border:none; color:white; border-radius:4px; cursor:pointer; padding: 5px 8px;" title="Activate Aura">✨</button>` 
+                        : '';
+
+                    // Map skill type to English for display
+                    const tipoDisplay = s.tipo === "Ativa" ? "Active" : "Passive";
+
+                    item.innerHTML = `
+                        <div style="flex:1">
+                            <strong style="font-size:0.85rem">${s.nome}</strong><br>
+                            <small>${s.categoria} | ${tipoDisplay}</small>
+                        </div>
+                        <div style="display:flex; gap:5px;">
+                            ${auraBtnHtml}
+                            <button onclick="toggleActionBar(${idx})" style="background:${barBtnColor}; opacity:${barBtnOpacity}; border:none; color:white; border-radius:4px; cursor:pointer; padding: 5px 8px;">⚡</button>
+                            <button class="btn-remove" onclick="removeSkill(${idx})" style="padding: 5px 10px;">X</button>
+                        </div>
+                    `;
+                    buildSection.appendChild(item);
+                });
+                buildList.appendChild(buildSection);
+            }
+
+            document.getElementById('total-points').innerText = totalPts;
+            document.getElementById('master-tokens').innerText = `${masters} / 2`;
+            document.getElementById('combat-bar-count').innerText = `${barCount} / 10`;
+        }
+
+        // Helper function to avoid repeating accordion creation code
+        function createTreeGroupHtml(el, skills, openedGroups) {
+            const availableSkills = skills.filter(s => !build.some(b => b.nome === s.nome));
+            if (availableSkills.length === 0) return null;
+
+            const groupWrapper = document.createElement('div');
+            groupWrapper.className = 'tree-group';
+
+            const header = document.createElement('div');
+            header.className = 'tree-header';
+            header.dataset.element = el;
+            
+            const wasOpen = openedGroups.includes(el);
+            if (wasOpen) header.classList.add('active');
+
+            header.innerHTML = `
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span class="arrow">▼</span>
+                    <strong style="font-size:0.85rem; text-transform:uppercase;">${el}</strong>
+                </div>
+                <span class="badge-count">${availableSkills.length}</span>
+            `;
+
+            const content = document.createElement('div');
+            content.className = 'tree-content';
+            if (wasOpen) content.classList.add('show');
+
+            const order = { "OPENER": 0, "BASIC": 1, "INTERMEDIATE": 2, "MASTER": 3, "MASTER STANCES": 4, "STANCE": 5, "RACIAL": 6 };
+            availableSkills.sort((a,b) => (order[a.categoria.toUpperCase()] ?? 99) - (order[b.categoria.toUpperCase()] ?? 99));
+
+            availableSkills.forEach(s => {
+                const req = checkRequirements(s);
+                const card = document.createElement('div');
+                card.className = `skill-card ${req.canBuy ? '' : 'disabled'}`;
+                card.onclick = (e) => { e.stopPropagation(); if(req.canBuy) buySkill(s); };
+                card.innerHTML = `<div><strong>${s.nome}</strong><br><small>${s.categoria}</small></div><span>${s.custo} pts</span>`;
+                content.appendChild(card);
+            });
+
+            header.onclick = () => {
+                header.classList.toggle('active');
+                content.classList.toggle('show');
+            };
+
+            groupWrapper.appendChild(header);
+            groupWrapper.appendChild(content);
+            return groupWrapper;
+        }
+
+        function exportBuild() {
+            if (build.length === 0) return;
+
+            // Lists to store specific information
+            let selectedRacials = [];
+            let selectedCombatStyles = [];
+            let selectedTrees = [];
+
+            build.forEach(s => {
+                const el = s.elemento.trim();
+                const cat = s.categoria.trim().toUpperCase();
+
+                if (el.toUpperCase().includes('RACIAL')) {
+                    // For racials, we want the skill name (e.g., Nemea Aurora)
+                    selectedRacials.push(s.nome);
+                } else if (el.toUpperCase().includes('COMBAT STYLES') || cat.includes('STANCE')) {
+                    // For styles, we want the Stance name (e.g., Marksman)
+                    selectedCombatStyles.push(s.nome);
+                } else {
+                    // For common spells, we want only the Element/Tree name
+                    selectedTrees.push(el);
+                }
+            });
+
+            // Remove duplicates (especially for Trees, where you have multiple spells of the same element)
+            selectedRacials = [...new Set(selectedRacials)];
+            selectedCombatStyles = [...new Set(selectedCombatStyles)];
+            selectedTrees = [...new Set(selectedTrees)];
+
+            const actionBar = build.filter(s => s.naBarra);
+            const totalPts = build.reduce((sum, s) => sum + s.custo, 0);
+
+            // Build the corrected text
+            let text =`**RPP:** ${totalPts}\n`;
+
+            if (selectedRacials.length > 0) text += `**Racials:** ${selectedRacials.join(', ')}\n`;
+            if (selectedCombatStyles.length > 0) text += `**Combat Styles:** ${selectedCombatStyles.join(', ')}\n`;
+            if (selectedTrees.length > 0) text += `**Trees:** ${selectedTrees.join(' / ')}\n`;
+            // Add active aura if any
+            const activeAura = build.find(s => s.isAuraActive);
+            if (activeAura) text += `**Aura:** ${activeAura.nome}\n`;
+            
+
+            if (actionBar.length > 0) {
+                text += `\n`;
+                actionBar.forEach(s => {
+                    text += `- \`${s.nome}\`\n`;
+                });
+            }
+
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.getElementById('btn-export');
+                const originalText = btn.innerText;
+                btn.innerText = "✅ Summary Copied!";
+                btn.style.background = "var(--success)";
+                setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.style.background = "var(--accent)";
+                }, 2000);
+            });
+        }
+
+        async function loadDatabaseOnline() {
+            const status = document.getElementById('load-status');
+            const url = 'https://github.com/Native4K/Skills_database/blob/1ac4b0aa6b6a201beefaf2cb36029d615d8c2d68/Skills_Database.csv'; // <--- PASTE THE URL HERE
+
+            status.innerText = "Loading data...";
+            status.style.color = "var(--accent)";
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Error accessing the online file.");
+                
+                const csvText = await response.text();
+                processCSV(csvText); // Reuse your current processing function
+                
+                status.innerText = "Database updated!";
+                status.style.color = "var(--success)";
+            } catch (error) {
+                console.error(error);
+                status.innerText = "Error loading. Check connection.";
+                status.style.color = "var(--error)";
+            }
+        }
+
+    window.onload = loadDatabaseOnline;
+    </script>
+</body>
+</html>
